@@ -6,6 +6,8 @@
 	function navigateTo(path: string) {
 		goto(path);
 	}
+
+	let isLoading = false;
 </script>
 
 <svelte:head>
@@ -24,8 +26,8 @@
 		Click below to get started!
 	</h2>
 
-	<button on:click={() => navigateTo('/options')} class="subButton">
-		Get Started
+	<button on:click={() => (isLoading = true, navigateTo('/options'))} class="subButton">
+		{isLoading ? 'Loading...' : 'Get Started'}
 	</button>
 
 </section>

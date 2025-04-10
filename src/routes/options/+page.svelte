@@ -1,6 +1,18 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+    import { onMount } from 'svelte';
 
+    // Define an interface for the song object
+    interface Song {
+        id: number;
+        title: string;
+        artist: string;
+        duration: string;
+        thumbnail?: string; // Optional property
+    }
+
+    // Initialize with explicit type annotation
+    let songs: Song[] = [];
     let isVisible = false;
     let givenLink = '';
     let finalLink = '';
@@ -9,6 +21,9 @@
     let successState = '';
     let playlistName = '';
     let playlistImgSrc = '';
+    let playlistCreator = '';
+
+    let songsContainer : HTMLElement;
 
 	function navigateTo(path: string) {
 		goto(path);
@@ -16,6 +31,18 @@
 
     function parseURL(url: string) {
         return url.split('/playlist/')[1]?.split('?')[0];
+    }
+
+    function scrollIntoView(node: HTMLElement) {
+        setTimeout(() => {
+            node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 0);
+        
+        return {
+            update() {
+                // For updates if needed
+            }
+        };
     }
 
     async function getPlaylist(url: string) {
@@ -32,6 +59,9 @@
                 const data = await response.json();
                 playlistName = data.name;
                 playlistImgSrc = data.images[0].url;
+                playlistCreator = data.owner.id;
+                songs = processSpotifyPlaylist(data);
+                    // After songs are loaded, scroll to a specific element
             } else {
                 throw new Error('Failed to fetch data. Please check link and try again.');
             }
@@ -44,6 +74,55 @@
         } finally {
             isLoading = false;
         }
+    }
+
+    $: if (isVisible && songs.length > 0 && songsContainer) {
+        setTimeout(() => {
+            songsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+    }
+
+    
+    // Helper function to format duration from milliseconds to mm:ss
+    function formatDuration(ms: number): string {
+        const minutes = Math.floor(ms / 60000);
+        const seconds = Math.floor((ms % 60000) / 1000);
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    // Helper function to process Spotify playlist response
+    function processSpotifyPlaylist(playlistData: any): Song[] {
+        // Check if the response contains tracks
+        if (!playlistData || !playlistData.tracks || !playlistData.tracks.items) {
+            throw new Error('Invalid playlist data format');
+        }
+        
+        // Map Spotify track items to our Song format
+        return playlistData.tracks.items.map((item: any, index: number) => {
+        const track = item.track;
+        
+        if (!track) return null; // Skip if track is null (can happen with deleted tracks)
+        
+        // Get primary artist (Spotify can have multiple artists)
+        const artistName = track.artists && track.artists.length > 0 
+            ? track.artists.map((artist: any) => artist.name).join(', ')
+            : 'Unknown Artist';
+        
+        // Get album image if available
+        const thumbnail = track.album && track.album.images && track.album.images.length > 0
+            ? track.album.images[track.album.images.length - 1].url // Smallest image
+            : undefined;
+        
+        // Return formatted song object
+        return {
+            id: track.id,
+            title: track.name || 'Unknown Track',
+            artist: artistName,
+            duration: formatDuration(track.duration_ms || 0),
+            thumbnail: thumbnail,
+            uri: track.uri
+        };
+        }).filter(Boolean); // Remove any null entries
     }
 
 
@@ -101,40 +180,31 @@
                     {playlistName}
                 </div>
                 <img class="playlist-cover" alt="playlist cover" src={playlistImgSrc}>
+                <div class="playlist-creator">
+                    by {playlistCreator}
+                </div>
             </div>
 
-            <div class = "songs-container">
+            <div class = "songs-container" bind:this={songsContainer}>
                 <ol>
+                    {#each songs as song, index}
                     <li>        
-                        <div class="song-number">1</div>
-                            <div class="song-info">
-                                <!-- Optional song album thumbnail
-                                <div class="song-thumbnail">
-                                    <img src="album-thumbnail.jpg" alt="">
-                                </div>
-                                -->
-                                <div class="song-details">
-                                    <div class="song-title">Song Name</div>
-                                    <div class="song-artist">Artist Name</div>
-                                </div>
-                            </div>
-                        <div class="song-duration">3:45</div>
+                      <div class="song-number">{index + 1}</div>
+                      <div class="song-info">
+                        <!-- Optional song album thumbnail -->
+                        {#if song.thumbnail}
+                          <div class="song-thumbnail">
+                            <img src={song.thumbnail} alt={`${song.title} album art`}>
+                          </div>
+                        {/if}
+                        <div class="song-details">
+                          <div class="song-title">{song.title}</div>
+                          <div class="song-artist">{song.artist}</div>
+                        </div>
+                      </div>
+                      <div class="song-duration">{song.duration}</div>
                     </li>
-                    <li>        
-                        <div class="song-number">2</div>
-                            <div class="song-info">
-                                <!-- Optional song album thumbnail
-                                <div class="song-thumbnail">
-                                    <img src="album-thumbnail.jpg" alt="">
-                                </div>
-                                -->
-                                <div class="song-details">
-                                    <div class="song-title">Song Name</div>
-                                    <div class="song-artist">Artist Name</div>
-                                </div>
-                            </div>
-                        <div class="song-duration">3:45</div>
-                    </li>                  
+                  {/each}             
                 </ol>
             </div>
         </div>
@@ -182,6 +252,7 @@
         background-color: black;
         border-radius: 6px;
         margin-top: 20px;
+        margin-bottom: 75px;
         width: 80%;
         display: flex;
     }
@@ -191,9 +262,12 @@
     }
 
     .songs-container {
+        margin-top: 20px;
+        height: 450px;
         flex: 1;
         padding: 60px 20px 50px 20px;
         color: white;
+        overflow-y: auto;
     }
 
     .songs-container ol {
@@ -263,6 +337,18 @@
         font-size: 36px;
         font-weight: 900;
         color: #fff;
+        margin-top: 12px;
+        margin-bottom: 12px;
+        line-height: 1.2;
+        letter-spacing: -0.5px;
+        text-align: center;
+        width: 100%;
+    }
+
+    .playlist-creator {
+        font-size: 24px;
+        font-weight: 900;
+        color: #fff;
         margin-bottom: 12px;
         line-height: 1.2;
         letter-spacing: -0.5px;
@@ -277,10 +363,10 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center; /* Add this to center vertically too */
+        justify-content: center;
         margin-bottom: 24px;
         padding: 16px;
-        padding-bottom: 50px;
+        padding-bottom: 16px;
     }
 
     /* Fix the cover image alignment */
