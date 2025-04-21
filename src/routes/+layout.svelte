@@ -15,7 +15,7 @@
 
 	<footer>
 		<p>
-			visit <a href="spotify.com">spotify</a>
+			visit <a href="https://spotify.com">spotify</a>
 		</p>
 	</footer>
 </div>
